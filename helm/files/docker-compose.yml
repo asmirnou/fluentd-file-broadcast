@@ -1,0 +1,42 @@
+## Basic Usage
+##
+## Post a record with the tag "app"
+#$ curl -X POST -d 'json={"foo":"bar"}' http://localhost:9880/dummy
+##
+## Overwrite the timestamp to 2018-02-16 04:40:37.3137116
+#$ curl -X POST -d 'json={"foo":"bar"}' http://localhost:9880/dummy?time=1518756037.3137116
+##
+version: "2"
+services:
+  fluentd-receiver:
+    container_name: fluentd-receiver
+    image: fluent/fluentd:latest
+    volumes:
+      - "./fluentd/config/foward-input-file-output.conf:/fluentd/etc/fluent.conf"
+      - "./log:/fluentd/log"
+    ports:
+      - 24224:24224
+  fluentd-broadcaster:
+    container_name: fluentd-broadcaster
+    image: fluent/fluentd:latest
+    environment:
+      - RECEIVER_HOSTNAME=fluentd-receiver
+      - RECEIVER_PORT=24224
+    volumes:
+      - "./fluentd/config/http-input-forward-output.conf:/fluentd/etc/fluent.conf"
+    ports:
+      - 9880:9880
+    depends_on:
+      - fluentd-receiver
+  logrotate:
+    container_name: logrotate
+    image: logrotate:latest
+    build:
+      context: "./logrotate"
+    entrypoint: [
+      "crond", "-f", "-d", "8"
+    ]
+    volumes:
+      - "./logrotate/logrotate.conf:/etc/logrotate.d/truncate.conf"
+      - "./logrotate/crontab:/etc/crontabs/root"
+      - "./log:/var/log/truncate"

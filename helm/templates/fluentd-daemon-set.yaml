@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ template "fluentd-file-broadcast.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "fluentd-file-broadcast.commonlabels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "fluentd-file-broadcast.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: receiver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "fluentd-file-broadcast.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: receiver
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: "docker/default"
+        checksum/fluentd-config: {{ include (print $.Template.BasePath "/fluentd-config.yaml") . | sha256sum }}
+        checksum/logrotate-config: {{ include (print $.Template.BasePath "/logrotate-config.yaml") . | sha256sum }}
+    spec:
+      priorityClassName: {{ include "fluentd-file-broadcast.fullname" . }}-priority
+      serviceAccountName: {{ template "fluentd-file-broadcast.fullname" . }}
+      containers:
+      - name: fluentd
+        image: "{{ .Values.daemonset.fluentd.image.repository }}:{{ .Values.daemonset.fluentd.image.tag }}"
+        imagePullPolicy: "{{ .Values.daemonset.fluentd.image.pullPolicy }}"
+        terminationGracePeriodSeconds: 30
+        resources:
+{{ toYaml .Values.daemonset.fluentd.resources | trim | indent 10 }}
+        ports:
+        - name: forward
+          containerPort: 24224
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: "/fluentd/log"
+        - name: fluentd-config-volume
+          mountPath: "/fluentd/etc"
+          readOnly: true
+        - name:  fluentd-plugin-volume
+          mountPath: "/fluentd/plugins"
+          readOnly: true
+      - name: logrotate
+        image: "{{ .Values.daemonset.logrotate.image.repository }}:{{ .Values.daemonset.logrotate.image.tag }}"
+        imagePullPolicy: "{{ .Values.daemonset.logrotate.image.pullPolicy }}"
+        args: ["crond", "-f", "-d", "8"]
+        resources:
+{{ toYaml .Values.daemonset.logrotate.resources | trim | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: "/var/log/truncate"
+        - name: crontab-config-volume
+          mountPath: "/etc/crontabs"
+          readOnly: true
+        - name: logrotate-config-volume
+          mountPath: "/etc/logrotate.d"
+          readOnly: true
+      volumes:
+      - name: data
+        hostPath:
+          path: {{ include "fluentd-file-broadcast.fullname" . }}
+      - name: fluentd-config-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-config
+          items:
+          - key: "foward-input-file-output.conf"
+            path: "fluent.conf"
+      - name: fluentd-plugin-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-plugin
+      - name: crontab-config-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-logrotate
+          items:
+          - key: "crontab"
+            path: "root"
+      - name: logrotate-config-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-logrotate
+          items:
+          - key: "logrotate.conf"
+            path: "truncate.conf"
+    {{- with .Values.daemonset.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}
+    {{- with .Values.daemonset.affinity }}
+      affinity:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}
+    {{- with .Values.daemonset.tolerations }}
+      tolerations:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}

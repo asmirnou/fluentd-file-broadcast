@@ -1,0 +1,13 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ template "fluentd-file-broadcast.fullname" . }}-logrotate
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "fluentd-file-broadcast.commonlabels" . | indent 4 }}
+data:
+  crontab: |-
+{{ .Files.Get "files/logrotate/crontab" | indent 4 }}
+
+  logrotate.conf: |-
+{{ .Files.Get "files/logrotate/logrotate.conf" | indent 4 }}

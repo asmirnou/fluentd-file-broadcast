@@ -1,0 +1,16 @@
+{{ $root := . }}
+{{- range $suffix := tuple "config" "plugin" }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ template "fluentd-file-broadcast.fullname" $root }}-{{ $suffix }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+{{ include "fluentd-file-broadcast.commonlabels" $root | indent 4 }}
+data:
+{{- range $path, $bytes := $root.Files.Glob (printf "files/fluentd/%s/*" $suffix) }}
+{{ base $path | indent 2 }}: |-
+{{ $root.Files.Get $path | indent 4 }}
+{{ end }}
+{{- end }}

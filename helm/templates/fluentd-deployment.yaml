@@ -1,0 +1,74 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "fluentd-file-broadcast.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "fluentd-file-broadcast.commonlabels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "fluentd-file-broadcast.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: broadcaster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ template "fluentd-file-broadcast.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: broadcaster
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: "docker/default"
+        checksum/fluentd-config: {{ include (print $.Template.BasePath "/fluentd-config.yaml") . | sha256sum }}
+    spec:
+      priorityClassName: {{ include "fluentd-file-broadcast.fullname" . }}-priority
+      serviceAccountName: {{ template "fluentd-file-broadcast.fullname" . }}
+      containers:
+      - name: fluentd
+        image: "{{ .Values.deployment.fluentd.image.repository }}:{{ .Values.deployment.fluentd.image.tag }}"
+        imagePullPolicy: "{{ .Values.deployment.fluentd.image.pullPolicy }}"
+        terminationGracePeriodSeconds: 30
+        resources:
+{{ toYaml .Values.deployment.fluentd.resources | trim | indent 10 }}
+        ports:
+        - name: http
+          containerPort: 9880
+          protocol: TCP
+        env:
+        - name: "RECEIVER_HOSTNAME"
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: "RECEIVER_PORT"
+          value: "24224"
+        volumeMounts:
+        - name: fluentd-config-volume
+          mountPath: "/fluentd/etc"
+          readOnly: true
+        - name:  fluentd-plugin-volume
+          mountPath: "/fluentd/plugins"
+          readOnly: true
+      volumes:
+      - name: fluentd-config-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-config
+          items:
+          - key: "http-input-forward-output.conf"
+            path: "fluent.conf"
+      - name: fluentd-plugin-volume
+        configMap:
+          name: {{ template "fluentd-file-broadcast.fullname" . }}-plugin
+    {{- with .Values.deployment.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}
+    {{- with .Values.deployment.affinity }}
+      affinity:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}
+    {{- with .Values.deployment.tolerations }}
+      tolerations:
+{{ toYaml . | trim | indent 8 }}
+    {{- end }}

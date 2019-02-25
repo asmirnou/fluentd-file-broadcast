@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fluentd-file-broadcast.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "fluentd-file-broadcast.commonlabels" . | indent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "fluentd-file-broadcast.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: broadcaster
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
